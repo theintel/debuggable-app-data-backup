@@ -20,16 +20,10 @@ class ShizukuUserService : IShizukuUserService.Stub() {
     }
 
     override fun run(command: String): ShellResult {
-        val process = Runtime.getRuntime().exec("sh")
-        val outputStream = DataOutputStream(process.outputStream)
+        Log.d(TAG, "Executing command: $command")
+
+        val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
         val commandResult = try {
-            command.split('\n').filter { it.isNotBlank() }.forEach {
-                outputStream.write(it.toByteArray())
-                outputStream.writeBytes('\n'.toString())
-                outputStream.flush()
-            }
-            outputStream.writeBytes("exit\n")
-            outputStream.flush()
             ShellResult(
                 code = process.waitFor(),
                 result = process.inputStream.bufferedReader().readText(),
@@ -53,7 +47,6 @@ class ShizukuUserService : IShizukuUserService.Stub() {
                 error = e.message,
             )
         } finally {
-            outputStream.close()
             process.inputStream.close()
             process.outputStream.close()
             process.destroy()

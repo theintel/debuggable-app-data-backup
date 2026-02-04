@@ -9,6 +9,8 @@
 
     <string name="app_data_import">Import</string>
     <string name="app_data_export">Export</string>
+    <string name="importing">Importing…</string>
+    <string name="exporting">Exporting…</string>
     <string name="app_data_transfer_subtitle">Backup/restore private app data of debuggable apps</string>
     <string name="shizuku_permission_not_granted">Shizuku permission not granted. Try again after granting</string>
     <string name="shizuku_needs_manual_permission">Please grant Shizuku permission manually</string>
@@ -19,5 +21,7 @@
     <string name="shizuku_shell_warnings">Some warnings were printed while transferring app data:\n%1$s</string>
     <string name="no_data_backup_found">No data backup found for %1$s in %2$s/%3$s</string>
     <string name="search">Search</string>
+    <string name="clean_restore">Clean restore</string>
+    <string name="refresh">Refresh</string>
 
 </resources>

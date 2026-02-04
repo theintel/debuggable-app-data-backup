@@ -9,4 +9,16 @@
         android:icon="@drawable/ic_search"
         app:showAsAction="always|collapseActionView"
         tools:ignore="AlwaysShowAction" />
+    <item
+        android:id="@+id/action_reload"
+        android:title="@string/refresh"
+        android:icon="@drawable/ic_refresh"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/pref_clean_restore"
+        android:title="@string/clean_restore"
+        android:checkable="true"
+        app:showAsAction="never" />
+
 </menu>

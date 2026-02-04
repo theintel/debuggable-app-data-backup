@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuInflater
@@ -25,6 +26,7 @@ import me.timschneeberger.appdatabackup.databinding.FragmentAppListBinding
 import me.timschneeberger.appdatabackup.databinding.ItemAppBinding
 import java.util.Locale
 import java.util.concurrent.Executors
+import androidx.core.content.edit
 
 
 abstract class BaseAppListFragment : Fragment() {
@@ -33,6 +35,9 @@ abstract class BaseAppListFragment : Fragment() {
 
     private val loader = Executors.newSingleThreadExecutor()
     private var pkgsLoaded = false
+
+    protected val prefs
+        get() = context?.getSharedPreferences("app_list_prefs", Context.MODE_PRIVATE)
 
     abstract fun shouldShowPackage(info: PackageInfo): Boolean
 
@@ -51,6 +56,55 @@ abstract class BaseAppListFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        binding.recycler.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            addItemDecoration(DividerItemDecoration(requireContext(), DividerItemDecoration.VERTICAL))
+        }
+
+        loadPackages()
+
+        // Register MenuProvider to provide the action bar search
+        requireActivity().addMenuProvider(object : MenuProvider {
+            override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+                menuInflater.inflate(R.menu.menu_app_list, menu)
+                val searchItem = menu.findItem(R.id.action_search)
+                val sv = searchItem?.actionView as? SearchView
+                sv?.queryHint = getString(R.string.search)
+                sv?.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                    override fun onQueryTextSubmit(query: String?): Boolean = true
+                    override fun onQueryTextChange(newText: String?): Boolean {
+                        if (pkgsLoaded) adapter.filter.filter(newText)
+                        return true
+                    }
+                })
+
+               menu.findItem(R.id.action_reload)?.setOnMenuItemClickListener {
+                    loadPackages()
+                    true
+                }
+
+                val prefCleanRestore = menu.findItem(R.id.pref_clean_restore)
+                prefCleanRestore.isChecked = prefs!!.getBoolean("pref_clean_restore", false)
+                prefCleanRestore.setOnMenuItemClickListener {
+                    val newValue = !prefCleanRestore.isChecked
+                    prefCleanRestore.isChecked = newValue
+                    prefs?.edit { putBoolean("pref_clean_restore", newValue) }
+                    true
+                }
+            }
+
+            override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+                return false
+            }
+        }, viewLifecycleOwner, Lifecycle.State.RESUMED)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        loader.shutdownNow()
+    }
+
+    private fun loadPackages() {
         // Load package list off the UI thread and show progress
         binding.progressBar.visibility = View.VISIBLE
         binding.recycler.visibility = View.GONE
@@ -70,43 +124,17 @@ abstract class BaseAppListFragment : Fragment() {
 
             activity?.runOnUiThread {
                 binding.recycler.apply {
-                    layoutManager = LinearLayoutManager(requireContext())
                     adapter = PackageAdapter(requireContext(), list.toMutableList()).also {
                         this@BaseAppListFragment.adapter = it
                     }
-                    addItemDecoration(DividerItemDecoration(requireContext(), DividerItemDecoration.VERTICAL))
                     visibility = View.VISIBLE
                 }
                 binding.progressBar.visibility = View.GONE
                 pkgsLoaded = true
+
+                Log.d("BaseAppListFragment", "Loaded ${list.size} packages")
             }
         }
-
-        // Register MenuProvider to provide the action bar search
-        requireActivity().addMenuProvider(object : MenuProvider {
-            override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-                menuInflater.inflate(R.menu.menu_app_list, menu)
-                val searchItem = menu.findItem(R.id.action_search)
-                val sv = searchItem?.actionView as? SearchView
-                sv?.queryHint = getString(R.string.search)
-                sv?.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                    override fun onQueryTextSubmit(query: String?): Boolean = true
-                    override fun onQueryTextChange(newText: String?): Boolean {
-                        if (pkgsLoaded) adapter.filter.filter(newText)
-                        return true
-                    }
-                })
-            }
-
-            override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-                return false
-            }
-        }, viewLifecycleOwner, Lifecycle.State.RESUMED)
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        loader.shutdownNow()
     }
 
     protected class VH(val binding: ItemAppBinding) : RecyclerView.ViewHolder(binding.root)
