@@ -26,14 +26,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (savedInstanceState == null) {
-            val pkgs = intent
-                .getStringArrayExtra(EXTRA_PACKAGE_NAMES)
-
-            AppDataListFragment.newInstance(pkgs).also {
+            AppDataListFragment.newInstance(
+                intent.extras?.getStringArrayList(EXTRA_PACKAGE_NAMES)?.toTypedArray()
+            ).also {
                 supportFragmentManager.beginTransaction().replace(R.id.container, it).commit()
             }
         }
-
         binding.toolbar.apply {
             setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
             setSupportActionBar(this)
