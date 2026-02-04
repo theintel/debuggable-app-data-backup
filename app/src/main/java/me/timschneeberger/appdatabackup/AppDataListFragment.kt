@@ -26,6 +26,8 @@ import java.io.File
  */
 class AppDataListFragment : BaseAppListFragment() {
 
+    private var customPackageFilter: Set<String>? = null
+
     private fun checkIfFolderExists(path: String): Boolean {
         return ShizukuWrapper.useServiceSafely { srv ->
             return@useServiceSafely srv.run("ls -d $path").code == 0
@@ -58,6 +60,13 @@ class AppDataListFragment : BaseAppListFragment() {
         sdCard + "/Android/data/$packageName/private_data".let {
             if (deviceEncryptedStorage) it + "_de" else it
         }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        arguments?.getStringArray(ARG_PACKAGE_NAMES)?.let {
+            customPackageFilter = it.toSet()
+        }
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -192,8 +201,6 @@ class AppDataListFragment : BaseAppListFragment() {
                 }
             }
 
-            Log.d("Shizuku-LOG", "Transfer finished")
-
             // Dismiss dialog safely on the main thread
             if (progressDialog.isShowing) {
                 try { progressDialog.dismiss() } catch (_: Exception) {}
@@ -214,9 +221,23 @@ class AppDataListFragment : BaseAppListFragment() {
         setOnClickListener { onClick() }
     }
 
-    override fun shouldShowPackage(info: PackageInfo) = info.applicationInfo?.let {
-        it.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-    } == true
+    override fun shouldShowPackage(info: PackageInfo) = customPackageFilter?.contains(info.packageName)
+        ?: (info.applicationInfo?.let {
+            it.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        } == true)
+
 
     override fun queryPackageStatus(pkgName: String): String = ""
+
+    companion object {
+        const val ARG_PACKAGE_NAMES = "package_names"
+
+        fun newInstance(packageNames: Array<String>?) = AppDataListFragment().apply {
+            arguments = Bundle().apply {
+                if (packageNames != null) {
+                    putStringArray(ARG_PACKAGE_NAMES, packageNames)
+                }
+            }
+        }
+    }
 }

@@ -26,7 +26,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (savedInstanceState == null) {
-            AppDataListFragment().also {
+            val pkgs = intent
+                .getStringArrayExtra(EXTRA_PACKAGE_NAMES)
+
+            AppDataListFragment.newInstance(pkgs).also {
                 supportFragmentManager.beginTransaction().replace(R.id.container, it).commit()
             }
         }
@@ -52,5 +55,10 @@ class MainActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    companion object {
+        private const val EXTRA_PACKAGE_NAMES = "${BuildConfig.APPLICATION_ID}.package_names"
+
     }
 }
