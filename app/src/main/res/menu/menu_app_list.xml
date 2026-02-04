@@ -21,4 +21,10 @@
         android:checkable="true"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/pref_show_all"
+        android:title="@string/show_all_apps"
+        android:checkable="true"
+        app:showAsAction="never" />
+
 </menu>

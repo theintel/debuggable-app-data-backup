@@ -91,6 +91,16 @@ abstract class BaseAppListFragment : Fragment() {
                     prefs?.edit { putBoolean("pref_clean_restore", newValue) }
                     true
                 }
+
+                val prefShowAll = menu.findItem(R.id.pref_show_all)
+                prefShowAll.isChecked = prefs?.getBoolean("show_all_apps", false) ?: false
+                prefShowAll.setOnMenuItemClickListener {
+                    val newValue = !prefShowAll.isChecked
+                    prefShowAll.isChecked = newValue
+                    prefs?.edit { putBoolean("show_all_apps", newValue) }
+                    loadPackages()
+                    true
+                }
             }
 
             override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
@@ -112,7 +122,7 @@ abstract class BaseAppListFragment : Fragment() {
         loader.execute {
             val pm = requireContext().packageManager
             val list = pm.getInstalledPackages(0)
-                .filter { shouldShowPackage(it) }
+                .filter { (prefs?.getBoolean("show_all_apps", false) ?: false) || shouldShowPackage(it) }
                 .mapNotNull {
                     try {
                         val ai = it.applicationInfo ?: return@mapNotNull null

@@ -23,5 +23,6 @@
     <string name="search">Search</string>
     <string name="clean_restore">Clean restore</string>
     <string name="refresh">Refresh</string>
+    <string name="show_all_apps">Show all apps</string>
 
 </resources>
