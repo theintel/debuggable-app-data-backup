@@ -3,11 +3,13 @@ package me.timschneeberger.appdatabackup
 import android.annotation.SuppressLint
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import me.timschneeberger.appdatabackup.databinding.ItemToolbuttonBinding
+import me.timschneeberger.appdatabackup.shizuku.ShellResult
 import me.timschneeberger.appdatabackup.shizuku.ShizukuWrapper
 import me.timschneeberger.appdatabackup.utils.showAlert
 import androidx.annotation.DrawableRes
@@ -22,11 +24,38 @@ import me.timschneeberger.appdatabackup.utils.runOnUiThread
 import java.io.File
 
 /**
- * System-only fragment that lists debuggable packages and exporting/importing their data.
+ * System-only fragment that lists packages whose data can be exported/imported.
+ *
+ * Two transfer modes are supported:
+ *  - [TransferMode.RUN_AS]: debuggable apps, copied directly through `run-as`.
+ *  - [TransferMode.ADB_BACKUP]: non-debuggable apps that allow backup in their manifest
+ *    (`android:allowBackup`), handled by the system `bu` tool, which is what `adb backup` uses.
  */
 class AppDataListFragment : BaseAppListFragment() {
 
+    private enum class TransferMode { RUN_AS, ADB_BACKUP }
+
     private var customPackageFilter: Set<String>? = null
+
+    private fun transferModeOf(info: ApplicationInfo): TransferMode? = when {
+        info.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 -> TransferMode.RUN_AS
+        info.flags and ApplicationInfo.FLAG_ALLOW_BACKUP != 0 -> TransferMode.ADB_BACKUP
+        else -> null
+    }
+
+    private fun transferModeOf(pkg: String): TransferMode? = try {
+        transferModeOf(requireContext().packageManager.getApplicationInfo(pkg, 0))
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
+    }
+
+    /**
+     * Since Android 12, `adb backup` no longer includes app data for non-debuggable apps
+     * that target API 31 or higher, even if they allow backup.
+     */
+    private fun isAdbBackupRestricted(info: ApplicationInfo) =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            info.targetSdkVersion >= Build.VERSION_CODES.S
 
     private fun checkIfFolderExists(path: String): Boolean {
         return ShizukuWrapper.useServiceSafely { srv ->
@@ -51,6 +80,11 @@ class AppDataListFragment : BaseAppListFragment() {
             // Return error message if set
             return@useServiceSafely result.error?.plus("\n") ?: ""
         }
+    }
+
+    /** Runs a command and returns the full result without any error handling or dialogs. */
+    private fun runShellForResult(command: String): ShellResult {
+        return ShizukuWrapper.useServiceSafely { srv -> srv.run(command) }
     }
 
     @SuppressLint("SdCardPath")
@@ -96,9 +130,82 @@ class AppDataListFragment : BaseAppListFragment() {
             }
         )
 
+    /**
+     * Backs up or restores an app through the system backup tool (`bu`), the same mechanism as
+     * `adb backup` / `adb restore`. Android shows a confirmation screen on the device that the
+     * user must accept before the transfer starts.
+     */
+    private fun executeAdbTransfer(pkg: String, isExport: Boolean) {
+        val pkgDir = "$backupDir/$pkg"
+        val backupFile = "$pkgDir/$ADB_BACKUP_FILE_NAME"
+
+        if (isExport) {
+            runShell("mkdir -p '$pkgDir'")
+
+            val result = runShellForResult("bu backup $pkg > '$backupFile'")
+            if (result.code != 0) {
+                runShell("rm -f '$backupFile'", false)
+                runOnUiThread {
+                    showAlert(
+                        getString(R.string.error),
+                        getString(R.string.adb_backup_failed, result.error ?: "")
+                    )
+                }
+                return
+            }
+
+            // A backup without any app data is only a few hundred bytes of headers
+            val size = runShellForResult("stat -c %s '$backupFile'").result.trim().toLongOrNull() ?: 0L
+            val warnings = buildString {
+                if (!result.error.isNullOrBlank()) appendLine(result.error!!.trim())
+                if (size < ADB_BACKUP_MIN_SIZE) {
+                    appendLine(getString(R.string.adb_backup_empty))
+                }
+            }.trim()
+            if (warnings.isNotEmpty()) {
+                runOnUiThread {
+                    showAlert(
+                        title = getString(R.string.warnings),
+                        message = getString(R.string.shizuku_shell_warnings, warnings)
+                    )
+                }
+            }
+        } else {
+            if (!checkIfFolderExists(backupFile)) {
+                runOnUiThread {
+                    showAlert(
+                        getString(R.string.error),
+                        getString(R.string.no_adb_backup_found, pkg, backupFile)
+                    )
+                }
+                return
+            }
+
+            val result = runShellForResult("bu restore < '$backupFile'")
+            if (result.code != 0 || !result.error.isNullOrBlank()) {
+                runOnUiThread {
+                    showAlert(
+                        title = getString(R.string.warnings),
+                        message = getString(
+                            R.string.shizuku_shell_warnings,
+                            result.error.orEmpty().trim()
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     private fun executeTransfer(pkg: String, isExport: Boolean, cleanRestore: Boolean = false) {
+        val mode = transferModeOf(pkg)
         val progressDialog: AlertDialog = requireContext().createProgressDialog(
-            if (isExport) getString(R.string.exporting) else getString(R.string.importing)
+            when {
+                mode == TransferMode.ADB_BACKUP -> getString(
+                    if (isExport) R.string.exporting_adb else R.string.importing_adb
+                )
+                isExport -> getString(R.string.exporting)
+                else -> getString(R.string.importing)
+            }
         )
 
         // Show dialog on main thread and then run the work on IO dispatcher
@@ -107,6 +214,11 @@ class AppDataListFragment : BaseAppListFragment() {
 
             withContext(Dispatchers.IO) {
                 try {
+                    if (mode == TransferMode.ADB_BACKUP) {
+                        executeAdbTransfer(pkg, isExport)
+                        return@withContext
+                    }
+
                     val temp = writableTempDir(pkg, false)
                     val tempDe = writableTempDir(pkg, true)
 
@@ -223,14 +335,36 @@ class AppDataListFragment : BaseAppListFragment() {
 
     override fun shouldShowPackage(info: PackageInfo) = customPackageFilter?.contains(info.packageName)
         ?: (info.applicationInfo?.let {
-            it.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+            val isPlainSystemApp = it.flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
+                it.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP == 0
+            // Plain system apps are hidden unless debuggable: nearly all of them allow backup
+            when (transferModeOf(it)) {
+                TransferMode.RUN_AS -> true
+                TransferMode.ADB_BACKUP -> !isPlainSystemApp
+                null -> false
+            }
         } == true)
 
 
-    override fun queryPackageStatus(pkgName: String): String = ""
+    override fun queryPackageStatus(pkgName: String): String = try {
+        val info = requireContext().packageManager.getApplicationInfo(pkgName, 0)
+        when (transferModeOf(info)) {
+            TransferMode.RUN_AS -> getString(R.string.mode_run_as)
+            TransferMode.ADB_BACKUP -> getString(
+                if (isAdbBackupRestricted(info)) R.string.mode_adb_backup_restricted
+                else R.string.mode_adb_backup
+            )
+            null -> ""
+        }
+    } catch (_: PackageManager.NameNotFoundException) {
+        ""
+    }
 
     companion object {
         const val ARG_PACKAGE_NAMES = "package_names"
+
+        private const val ADB_BACKUP_FILE_NAME = "backup.ab"
+        private const val ADB_BACKUP_MIN_SIZE = 1024L
 
         fun newInstance(packageNames: Array<String>?) = AppDataListFragment().apply {
             arguments = Bundle().apply {

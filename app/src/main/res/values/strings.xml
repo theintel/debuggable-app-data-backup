@@ -11,7 +11,7 @@
     <string name="app_data_export">Export</string>
     <string name="importing">Importing…</string>
     <string name="exporting">Exporting…</string>
-    <string name="app_data_transfer_subtitle">Backup/restore private app data of debuggable apps</string>
+    <string name="app_data_transfer_subtitle">Backup/restore private app data of debuggable apps and apps that allow ADB backup</string>
     <string name="shizuku_permission_not_granted">Shizuku permission not granted. Try again after granting</string>
     <string name="shizuku_needs_manual_permission">Please grant Shizuku permission manually</string>
     <string name="shizuku_not_active">Shizuku is not active. Do you want to open Shizuku now?</string>
@@ -20,6 +20,14 @@
     <string name="warnings">Warnings</string>
     <string name="shizuku_shell_warnings">Some warnings were printed while transferring app data:\n%1$s</string>
     <string name="no_data_backup_found">No data backup found for %1$s in %2$s/%3$s</string>
+    <string name="mode_run_as">run-as</string>
+    <string name="mode_adb_backup">ADB backup</string>
+    <string name="mode_adb_backup_restricted">ADB backup (may contain no data)</string>
+    <string name="exporting_adb">Exporting… Confirm the backup on your device screen</string>
+    <string name="importing_adb">Importing… Confirm the restore on your device screen</string>
+    <string name="adb_backup_failed">The backup could not be created:\n%1$s</string>
+    <string name="adb_backup_empty">The backup contains no app data. Since Android 12, ADB backups of non-debuggable apps that target API 31 or higher do not include app data, even if the app allows backup.</string>
+    <string name="no_adb_backup_found">No ADB backup found for %1$s at %2$s</string>
     <string name="search">Search</string>
     <string name="clean_restore">Clean restore</string>
     <string name="refresh">Refresh</string>
